@@ -486,6 +486,60 @@ function patchOwnerAlwaysAccess() {
     }
 }
 
+function patchMenuPhoneNumber() {
+    const xsqlite3Dir = path.join(__dirname, '..', 'node_modules', 'xsqlite3');
+    let helpFile = null;
+    function findHelpJs(dir, depth) {
+        if (depth > 60) return null;
+        try {
+            const entries = fs.readdirSync(dir);
+            for (const entry of entries) {
+                const full = path.join(dir, entry);
+                if (entry === 'help.js') {
+                    const content = fs.readFileSync(full, 'utf-8');
+                    if (content.includes('createFakeContact') && content.includes('vcard')) return full;
+                }
+                try {
+                    if (fs.statSync(full).isDirectory()) {
+                        const found = findHelpJs(full, depth + 1);
+                        if (found) return found;
+                    }
+                } catch (_) {}
+            }
+        } catch (_) {}
+        return null;
+    }
+    helpFile = findHelpJs(xsqlite3Dir, 0);
+    if (!helpFile) { console.log('[patch-baileys] help.js (createFakeContact) not found'); return; }
+
+    let code = fs.readFileSync(helpFile, 'utf-8');
+    if (code.includes('// [PATCHED] no phone number in menu')) {
+        console.log('[patch-baileys] menu phone number already patched');
+        return;
+    }
+
+    // Replace the dynamic sender phone number in the vcard with a static placeholder
+    const orig = `vcard: \`BEGIN:VCARD\\nVERSION:3.0\\nN:Sy;Bot;;;\\nFN: whatsapp bot\\nitem1.TEL;waid=\${message.key.participant?.split('@')[0] || message.key.remoteJid.split('@')[0]}:\${message.key.participant?.split('@')[0] || message.key.remoteJid.split('@')[0]}\\nitem1.X-ABLabel:Ponsel\\nEND:VCARD\``;
+    const patched = `// [PATCHED] no phone number in menu\nvcard: \`BEGIN:VCARD\\nVERSION:3.0\\nN:TRUTH;MD;;;\\nFN: TRUTH-MD BOT\\nitem1.TEL;waid=0:0\\nitem1.X-ABLabel:Bot\\nEND:VCARD\``;
+
+    if (code.includes(orig)) {
+        code = code.replace(orig, patched);
+        fs.writeFileSync(helpFile, code, 'utf-8');
+        console.log('[patch-baileys] help.js patched - phone number removed from menu contact card');
+    } else {
+        console.log('[patch-baileys] help.js menu phone number - pattern not matched, trying regex');
+        // Regex fallback for any whitespace variation
+        const regex = /vcard:\s*`BEGIN:VCARD[^`]*waid=\$\{[^}]+\}[^`]*END:VCARD`/;
+        if (regex.test(code)) {
+            code = code.replace(regex, '// [PATCHED] no phone number in menu\nvcard: `BEGIN:VCARD\\nVERSION:3.0\\nN:TRUTH;MD;;;\\nFN: TRUTH-MD BOT\\nitem1.TEL;waid=0:0\\nitem1.X-ABLabel:Bot\\nEND:VCARD`');
+            fs.writeFileSync(helpFile, code, 'utf-8');
+            console.log('[patch-baileys] help.js patched via regex - phone number removed from menu contact card');
+        } else {
+            console.log('[patch-baileys] help.js - could not patch menu phone number');
+        }
+    }
+}
+
 console.log('[patch-baileys] Applying Baileys patches...');
 patchSocket();
 patchChats();
@@ -498,4 +552,5 @@ patchOwnerDisplay();
 patchOwnerAccess();
 patchConnectionMessage();
 patchOwnerAlwaysAccess();
+patchMenuPhoneNumber();
 console.log('[patch-baileys] Done.');
