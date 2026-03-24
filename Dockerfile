@@ -9,8 +9,8 @@ FROM node:20
   # Step 1: Install all deps WITHOUT scripts (prevents libsignal native build failure)
   RUN npm install --legacy-peer-deps --ignore-scripts
 
-  # Step 2: Build better-sqlite3 from source (ensures correct native binary for Node 20 / ABI v115)
-  RUN npm install better-sqlite3@11.10.0 --legacy-peer-deps --build-from-source
+  # Step 2: Force-compile better-sqlite3 from source (npm rebuild always runs the build, even if already installed)
+  RUN npm rebuild better-sqlite3 --build-from-source
 
   # Step 3: Remove sharp installed without binary and reinstall it fresh with postinstall
   RUN rm -rf node_modules/sharp && \
